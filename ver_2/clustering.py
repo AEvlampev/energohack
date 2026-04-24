@@ -83,7 +83,6 @@ def visualize_clusters(X, labels, feature_names, output_dir, model=None,
     palette = sns.color_palette("husl", len(unique_labels))
     n_total = X.shape[0]
 
-    # ---------- 1. PCA scatter с эллипсами (подвыборка) ----------
     print("Построение PCA графика (может занять несколько секунд)...")
     pca = PCA(n_components=2, random_state=42)
     X_pca_all = pca.fit_transform(X)
@@ -101,14 +100,12 @@ def visualize_clusters(X, labels, feature_names, output_dir, model=None,
     plt.figure(figsize=(12, 8))
     ax = plt.gca()
 
-    # Рисуем только подвыборку
     for i, label in enumerate(unique_labels):
         mask = labels_sample == label
         ax.scatter(X_pca_sample[mask, 0], X_pca_sample[mask, 1],
                    color=palette[i], label=f'Кластер {label}',
                    alpha=0.6, edgecolor='k', s=20)
 
-    # Эллипсы и центроиды считаем по полным данным (быстро)
     plot_cluster_ellipses(ax, X_pca_all, labels, palette, n_std=1.5, alpha=0.15)
 
     for i, label in enumerate(unique_labels):
@@ -128,9 +125,7 @@ def visualize_clusters(X, labels, feature_names, output_dir, model=None,
     plt.close()
     print("PCA график сохранён.")
 
-    # ---------- 2. Silhouette plot (подвыборка) ----------
     print("Построение графика силуэта (может занять несколько секунд)...")
-    # Вычисляем silhouette_samples для всех? Медленно. Лучше на подвыборке.
     if n_total > max_silhouette_points:
         rng = np.random.RandomState(42)
         idx_sil = rng.choice(n_total, size=max_silhouette_points, replace=False)
@@ -140,7 +135,6 @@ def visualize_clusters(X, labels, feature_names, output_dir, model=None,
         X_sub = X
         labels_sub = labels
 
-    # Быстрое вычисление
     sample_sil_values = silhouette_samples(X_sub, labels_sub)
 
     plt.figure(figsize=(10, 7))
@@ -167,7 +161,6 @@ def visualize_clusters(X, labels, feature_names, output_dir, model=None,
     plt.close()
     print("График силуэта сохранён.")
 
-    # ---------- 3. Средние значения признаков (топ-10) ----------
     print("Построение графика средних значений признаков...")
     if feature_names is not None and len(feature_names) > 1:
         cluster_means = []
@@ -240,16 +233,13 @@ def cluster_portraits(snapshot, feature_names, top_n=5):
     if 'cluster' not in snapshot.columns:
         return {}
 
-    # Выбираем признаки, которые есть в snapshot и не являются бинарными контактами (для них свой подход)
     numeric_cols = [f for f in feature_names if f in snapshot.columns]
     if not numeric_cols:
         return {}
 
-    # Общие средние по всем данным
     overall_mean = snapshot[numeric_cols].mean()
     cluster_means = snapshot.groupby('cluster')[numeric_cols].mean()
 
-    # Важность признаков через RandomForest
     X = snapshot[numeric_cols].fillna(0).values
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
@@ -265,7 +255,6 @@ def cluster_portraits(snapshot, feature_names, top_n=5):
         for col in top_features:
             mean_cl = cluster_means.loc[cluster, col]
             mean_all = overall_mean[col]
-            # Для бинарных (0/1) признаков выводим процент
             if snapshot[col].nunique() <= 2 and snapshot[col].min() >= 0 and snapshot[col].max() <= 1:
                 pct_cl = mean_cl * 100
                 pct_all = mean_all * 100
@@ -278,7 +267,6 @@ def cluster_portraits(snapshot, feature_names, top_n=5):
                 desc_parts.append(desc)
                 continue
 
-            # Для количественных признаков: сравниваем относительное отклонение
             if abs(mean_all) > 1e-6:
                 relative_diff = (mean_cl - mean_all) / abs(mean_all)
                 if abs(relative_diff) < 0.2:
@@ -294,7 +282,6 @@ def cluster_portraits(snapshot, feature_names, top_n=5):
                 desc = f"{col}: {mean_cl:.1f}"
             desc_parts.append(desc)
 
-        # Добавляем общие сводки
         if 'debt_amount' in cluster_means.columns:
             desc_parts.append(f"Средний долг: {cluster_means.loc[cluster, 'debt_amount']:.0f} руб.")
         if 'debt_age' in cluster_means.columns:
