@@ -1,14 +1,6 @@
 import pandas as pd
 
 def generate_explanations(snapshot, recommendations, cluster_profiles, rec_df):
-    """
-    Создаёт DataFrame с отдельными колонками:
-    - cluster
-    - predicted_rate
-    - expected_recovery
-    - measures
-    - explanation (текстовое обоснование)
-    """
     explanations = []
     for acc_id, measures in recommendations.items():
         row = snapshot[snapshot['account_id'] == acc_id].iloc[0]
@@ -23,7 +15,6 @@ def generate_explanations(snapshot, recommendations, cluster_profiles, rec_df):
             rate = None
             recovery = None
 
-        # Краткое описание кластера (если имеется)
         cluster_info = cluster_profiles.loc[cl] if cl in cluster_profiles.index else None
         desc = f"Клиент {acc_id} в кластере {cl}. "
         if cluster_info is not None:

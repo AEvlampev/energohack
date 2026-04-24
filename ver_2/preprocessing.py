@@ -196,10 +196,8 @@ def build_monthly_snapshot(data, target_month):
         np.minimum(snapshot['last_payment_amount'] / snapshot['last_opening_balance'], 1.0),
         0.0
     )
-    # Убираем строки с NaN в recovery_rate (если вдруг)
     snapshot = snapshot.dropna(subset=['recovery_rate'])
 
-    # Удаляем дубликаты
     snapshot = snapshot.drop_duplicates(subset='account_id', keep='first')
 
     return snapshot

@@ -27,7 +27,6 @@ def main(target_date_str):
     snapshot = snapshot[snapshot['debt_amount'] > 0].copy()
     print(f"Найдено должников: {len(snapshot)}")
 
-    # ---------- Кластеризация ----------
     print("Подготовка признаков для кластеризации...")
     X, feat_names, preprocessor = prepare_clustering_features(snapshot)
 
@@ -41,7 +40,6 @@ def main(target_date_str):
         print("Создание графиков кластеризации...")
         visualize_clusters(X, labels, feat_names, output_dir, model=model)
 
-    # Распределение клиентов по кластерам
     clust_summary = cluster_summary(snapshot)
     print("\nРаспределение клиентов по кластерам:")
     summary_str = clust_summary.to_string(index=False)
@@ -54,7 +52,6 @@ def main(target_date_str):
     except Exception as e:
         print(f"Ошибка сохранения {dist_file}: {e}")
 
-    # Портреты кластеров
     print("\nПортреты кластеров (ключевые отличия):")
     portraits = cluster_portraits(snapshot, feat_names, top_n=5)
     try:
@@ -67,7 +64,6 @@ def main(target_date_str):
     except Exception as e:
         print(f"Ошибка сохранения {portr_file}: {e}")
 
-    # Профили кластеров
     print("\nПрофили кластеров (средние):")
     profiles = profile_clusters(snapshot)
     print(profiles)
@@ -82,7 +78,6 @@ def main(target_date_str):
     with open(output_dir / 'metrics_clustering.json', 'w') as f:
         json.dump(clust_metrics, f, indent=2)
 
-    # ---------- Обучение моделей ----------
     feature_cols = [
         'debt_amount', 'debt_age', 'num_contacts',
         'has_phone', 'has_email', 'has_benefits', 'gasification',
@@ -113,7 +108,6 @@ def main(target_date_str):
     with open(output_dir / 'metrics_classification.json', 'w') as f:
         json.dump(clf_metrics, f, indent=2)
 
-    # ---------- Оптимизация ----------
     print("\nОптимизация назначений...")
     effectiveness = {}
     recommendations, rec_df, limits_usage = greedy_optimize(
@@ -121,7 +115,6 @@ def main(target_date_str):
         model=reg_model, feature_cols=available_feats
     )
 
-    # ---------- Отчёт об использовании лимитов ----------
     print("\n=== Использование лимитов ===")
     if limits_usage:
         for measure, data in limits_usage.items():
@@ -132,11 +125,9 @@ def main(target_date_str):
     with open(output_dir / 'limits_usage.json', 'w') as f:
         json.dump(limits_usage, f, indent=2, ensure_ascii=False)
 
-    # ---------- Объяснения ----------
     print("Генерация обоснований...")
     explanations = generate_explanations(snapshot, recommendations, profiles, rec_df)
 
-    # Сохранение итогового файла
     output_file = output_dir / f'recommendations_{target_date_str}.csv'
     explanations.to_csv(output_file, index=False, encoding='utf-8-sig')
     print(f"Готово. Результат сохранён в {output_file}")
