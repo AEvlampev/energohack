@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -48,16 +49,12 @@ def perform_clustering(X, max_k=10, use_pca=True):
 
 
 def plot_cluster_ellipses(ax, X_pca, labels, palette, n_std=1.5, alpha=0.15):
-    """
-    Рисует эллипсы вокруг каждого кластера, используя PCA-проекцию.
-    n_std - радиус эллипса в стандартных отклонениях.
-    """
     unique_labels = np.unique(labels)
     for i, label in enumerate(unique_labels):
         cluster_points = X_pca[labels == label]
         if len(cluster_points) > 1:
             cov = np.cov(cluster_points, rowvar=False)
-            if cov.shape == (2, 2) and np.linalg.det(cov) > 1e-6:  # проверка на вырожденность
+            if cov.shape == (2, 2) and np.linalg.det(cov) > 1e-6:
                 center = np.mean(cluster_points, axis=0)
                 v, w = np.linalg.eigh(cov)
                 angle = np.degrees(np.arctan2(w[1, 0], w[0, 0]))
@@ -74,42 +71,35 @@ def visualize_clusters(X, labels, feature_names, output_dir, model=None):
     unique_labels = np.unique(labels)
     palette = sns.color_palette("husl", len(unique_labels))
 
-    # ---------- 1. PCA scatter с эллипсами ----------
+    # 1. PCA scatter с эллипсами
     pca = PCA(n_components=2, random_state=42)
     X_pca = pca.fit_transform(X)
 
     plt.figure(figsize=(12, 8))
     ax = plt.gca()
-
-    # Рисуем точки
     for i, label in enumerate(unique_labels):
         mask = labels == label
         ax.scatter(X_pca[mask, 0], X_pca[mask, 1],
                    color=palette[i], label=f'Кластер {label}',
                    alpha=0.6, edgecolor='k', s=20)
-
-    # Добавляем эллипсы
     plot_cluster_ellipses(ax, X_pca, labels, palette, n_std=1.5, alpha=0.15)
 
-    # Центроиды (точки покрупнее)
     for i, label in enumerate(unique_labels):
         mask = labels == label
         center = np.mean(X_pca[mask], axis=0)
         ax.scatter(*center, color=palette[i], edgecolor='black', s=200, marker='D',
                    linewidth=1.5, label=f'Центроид {label}')
-
-    ax.set_xlabel('Первая главная компонента')
-    ax.set_ylabel('Вторая главная компонента')
-    ax.set_title('Проекция данных на первые две главные компоненты (PCA)\nс эллипсами кластеров')
-    # Убираем дублирующиеся метки центроидов в легенде
     handles, labels_ = ax.get_legend_handles_labels()
     by_label = dict(zip(labels_, handles))
     ax.legend(by_label.values(), by_label.keys())
+    ax.set_xlabel('Первая главная компонента')
+    ax.set_ylabel('Вторая главная компонента')
+    ax.set_title('Проекция данных на первые две главные компоненты (PCA)\nс эллипсами кластеров')
     plt.tight_layout()
     plt.savefig(output_dir / 'clusters_pca.png', dpi=150)
     plt.close()
 
-    # ---------- 2. Silhouette plot (без изменений) ----------
+    # 2. Silhouette plot
     sample_silhouette_values = silhouette_samples(X, labels)
     plt.figure(figsize=(10, 7))
     y_lower = 10
@@ -124,7 +114,6 @@ def visualize_clusters(X, labels, feature_names, output_dir, model=None):
                           facecolor=color, alpha=0.7)
         plt.text(-0.05, y_lower + 0.5 * size_cluster_i, str(label))
         y_lower = y_upper + 10
-
     avg_sil = silhouette_score(X, labels)
     plt.axvline(x=avg_sil, color="red", linestyle="--")
     plt.xlabel('Коэффициент силуэта')
@@ -135,7 +124,7 @@ def visualize_clusters(X, labels, feature_names, output_dir, model=None):
     plt.savefig(output_dir / 'clusters_silhouette.png', dpi=150)
     plt.close()
 
-    # ---------- 3. Средние значения признаков (топ-10) ----------
+    # 3. Средние значения признаков (топ-10)
     if feature_names is not None and len(feature_names) > 1:
         cluster_means = []
         for label in unique_labels:
@@ -161,7 +150,7 @@ def visualize_clusters(X, labels, feature_names, output_dir, model=None):
 
 
 def profile_clusters(snapshot_with_labels):
-    """Средние характеристики кластеров (сырые данные)."""
+    """Средние характеристики кластеров."""
     return snapshot_with_labels.groupby('cluster').agg({
         'debt_amount': 'mean',
         'debt_age': 'mean',
@@ -171,3 +160,15 @@ def profile_clusters(snapshot_with_labels):
         'has_email': 'mean',
         'prev_restriction_notice': 'mean'
     }).round(2)
+
+
+def cluster_summary(snapshot_with_labels):
+    """Количество и процент клиентов в каждом кластере."""
+    counts = snapshot_with_labels['cluster'].value_counts().sort_index()
+    total = len(snapshot_with_labels)
+    summary = pd.DataFrame({
+        'cluster': counts.index,
+        'count': counts.values,
+        'percentage': (counts.values / total * 100).round(2)
+    })
+    return summary

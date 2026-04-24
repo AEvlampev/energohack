@@ -5,7 +5,9 @@ from pathlib import Path
 import config as cfg
 from preprocessing import load_all_data, build_monthly_snapshot
 from feature_engineering import prepare_clustering_features, add_cluster_labels
-from clustering import perform_clustering, visualize_clusters, profile_clusters
+from clustering import (
+    perform_clustering, visualize_clusters, profile_clusters, cluster_summary
+)
 from model import train_regression_model, train_classification_model
 from optimizer import greedy_optimize
 from explainer import generate_explanations
@@ -33,16 +35,18 @@ def main(target_date_str):
     if len(snapshot) < 4:
         snapshot['cluster'] = 0
         clust_metrics = {'silhouette': None, 'davies_bouldin': None}
-        # визуализацию пропускаем, т.к. нет кластеров
     else:
         model, labels, clust_metrics = perform_clustering(X, max_k=10)
         snapshot = add_cluster_labels(snapshot, labels)
-
-        # ----- ВИЗУАЛИЗАЦИЯ -----
         print("Создание графиков кластеризации...")
         visualize_clusters(X, labels, feat_names, output_dir, model=model)
 
-    print("Профили кластеров:")
+    # Статистика по кластерам
+    clust_summary = cluster_summary(snapshot)
+    print("\nРаспределение клиентов по кластерам:")
+    print(clust_summary.to_string(index=False))
+
+    print("\nПрофили кластеров (средние):")
     profiles = profile_clusters(snapshot)
     print(profiles)
 
@@ -88,16 +92,13 @@ def main(target_date_str):
         model=reg_model, feature_cols=available_feats
     )
 
+    # ---------- Объяснения ----------
     print("Генерация обоснований...")
     explanations = generate_explanations(snapshot, recommendations, profiles, rec_df)
 
-    final = explanations.merge(
-        rec_df[['account_id', 'measures', 'predicted_rate', 'expected_recovery']],
-        on='account_id', how='left'
-    )
-
+    # Сохранение итогового файла
     output_file = output_dir / f'recommendations_{target_date_str}.csv'
-    final.to_csv(output_file, index=False, encoding='utf-8-sig')
+    explanations.to_csv(output_file, index=False, encoding='utf-8-sig')
     print(f"Готово. Результат сохранён в {output_file}")
 
 if __name__ == '__main__':
@@ -105,5 +106,4 @@ if __name__ == '__main__':
     parser.add_argument('--date', required=True, help='Целевой месяц в формате YYYY-MM-01')
     parser.add_argument('--max-k', type=int, default=10, help='Максимальное число кластеров для перебора')
     args = parser.parse_args()
-    # Передадим max_k в perform_clustering при необходимости (модифицируйте вызов, если нужно)
     main(args.date)
