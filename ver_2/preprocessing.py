@@ -7,7 +7,6 @@ def load_all_data():
     data = {}
     base = Path(cfg.DATA_PATH)
 
-    # ===== 01 Общая информация =====
     df_info = pd.read_excel(base / cfg.CONFIG_FILES['info'])
     column_mapping = {
         'ЛС': 'account_id',
@@ -35,7 +34,6 @@ def load_all_data():
     df_info['account_id'] = df_info['account_id'].astype(int)
     data['info'] = df_info
 
-    # ===== 02 Оборотно-сальдовая ведомость =====
     df_raw = pd.read_excel(base / cfg.CONFIG_FILES['turnover'], header=None)
     num_columns = df_raw.shape[1]
 
@@ -59,7 +57,6 @@ def load_all_data():
 
     columns = columns[:num_columns]
 
-    # Уникализация имён (на случай дублирования дат)
     seen = {}
     unique_columns = []
     for col in columns:
@@ -84,7 +81,6 @@ def load_all_data():
 
     data['turnover'] = df_turnover
 
-    # ===== 03 Оплаты =====
     df_payments = pd.read_csv(base / cfg.CONFIG_FILES['payments'], sep=';', decimal=',')
     df_payments.columns = ['account_id', 'payment_date', 'amount', 'method']
     df_payments['payment_date'] = pd.to_datetime(df_payments['payment_date'], dayfirst=True, errors='coerce')
@@ -93,7 +89,6 @@ def load_all_data():
     df_payments['account_id'] = df_payments['account_id'].astype(int)
     data['payments'] = df_payments
 
-    # ===== 04–13 Меры воздействия =====
     measure_files = [
         'autodial', 'email', 'sms', 'operator_call', 'claim', 'visit',
         'restriction_notice', 'restriction', 'court_order', 'court_decision'
@@ -119,7 +114,6 @@ def load_all_data():
         df['account_id'] = df['account_id'].astype(int)
         data[m] = df
 
-    # ===== 14 Лимиты =====
     df_limits = pd.read_excel(base / cfg.CONFIG_FILES['limits'])
     data['limits'] = df_limits
 
@@ -143,11 +137,9 @@ def build_monthly_snapshot(data, target_month):
     df_pivot = df_long.pivot_table(index=['account_id', 'date'], columns='metric', values='value',
                                    aggfunc='first').reset_index()
 
-    # Текущее состояние на target_month
     current = df_pivot[df_pivot['date'] == target_month][['account_id', 'opening_balance']]
     current = current.rename(columns={'opening_balance': 'debt_opening'})
 
-    # Статические признаки из info
     info = data['info'].copy()
     bool_cols = ['remote_disconnect', 'has_phone', 'has_benefits', 'gasification',
                  'yar_obl_receipt', 'post_receipt', 'email_receipt', 'not_living',
@@ -160,7 +152,6 @@ def build_monthly_snapshot(data, target_month):
 
     snapshot = current.merge(info, on='account_id', how='left')
 
-    # История до target_month (включая последний завершённый месяц)
     history = df_pivot[df_pivot['date'] < target_month].sort_values('date')
     if not history.empty:
         hist_agg = history.groupby('account_id').agg(
@@ -186,7 +177,6 @@ def build_monthly_snapshot(data, target_month):
                                 snapshot['has_email'].astype(int) +
                                 snapshot['has_mobile'].astype(int))
 
-    # Предыдущие меры (до target_month)
     for m in ['autodial','email','sms','operator_call','claim','visit',
               'restriction_notice','restriction','court_order','court_decision']:
         if m in data:
@@ -196,14 +186,11 @@ def build_monthly_snapshot(data, target_month):
 
     snapshot = snapshot.fillna(0)
 
-    # ----- Этапность -----
     info_measures = ['prev_autodial','prev_email','prev_sms','prev_operator_call','prev_claim','prev_visit']
     restriction_measures = ['prev_restriction_notice','prev_restriction']
     snapshot['has_info_measures'] = snapshot[info_measures].any(axis=1)
     snapshot['has_restriction_measures'] = snapshot[restriction_measures].any(axis=1)
 
-    # ----- Целевая переменная: доля возвращённого долга за последний месяц -----
-    # recovery_rate = min(last_payment_amount / last_opening_balance, 1.0) если last_opening_balance > 0, иначе 0
     snapshot['recovery_rate'] = np.where(
         snapshot['last_opening_balance'] > 0,
         np.minimum(snapshot['last_payment_amount'] / snapshot['last_opening_balance'], 1.0),

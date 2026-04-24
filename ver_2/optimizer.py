@@ -137,7 +137,6 @@ def greedy_optimize(snapshot, effectiveness, monthly_limits, measure_criteria, m
     ])
     rec_df['measures'] = rec_df['account_id'].map(lambda x: ','.join(recommendations.get(x, [])))
 
-    # Словарь использования лимитов
     limits_usage = {m: {'used': current_usage[m], 'limit': limits[m]} for m in limits}
 
     return recommendations, rec_df, limits_usage
