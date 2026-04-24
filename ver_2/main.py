@@ -39,7 +39,7 @@ def main(target_date_str):
         model, labels, clust_metrics = perform_clustering(X, max_k=10)
         snapshot = add_cluster_labels(snapshot, labels)
         print("Создание графиков кластеризации...")
-        # visualize_clusters(X, labels, feat_names, output_dir, model=model)
+        visualize_clusters(X, labels, feat_names, output_dir, model=model)
 
     # Статистика по кластерам
     clust_summary = cluster_summary(snapshot)

@@ -11,6 +11,7 @@ from sklearn.decomposition import PCA
 from pathlib import Path
 
 def perform_clustering(X, max_k=10, use_pca=True):
+    """Кластеризация MiniBatchKMeans с автоподбором k по силуэту."""
     if use_pca and X.shape[1] > 15:
         pca = PCA(n_components=0.95, random_state=42)
         X = pca.fit_transform(X)
@@ -49,6 +50,7 @@ def perform_clustering(X, max_k=10, use_pca=True):
 
 
 def plot_cluster_ellipses(ax, X_pca, labels, palette, n_std=1.5, alpha=0.15):
+    """Эллипсы вокруг кластеров по PCA-проекции."""
     unique_labels = np.unique(labels)
     for i, label in enumerate(unique_labels):
         cluster_points = X_pca[labels == label]
@@ -65,66 +67,106 @@ def plot_cluster_ellipses(ax, X_pca, labels, palette, n_std=1.5, alpha=0.15):
                 ax.add_patch(ellipse)
 
 
-def visualize_clusters(X, labels, feature_names, output_dir, model=None):
+def visualize_clusters(X, labels, feature_names, output_dir, model=None,
+                       max_scatter_points=10000, max_silhouette_points=20000):
+    """
+    Строит и сохраняет три графика с ускорением через подвыборки.
+
+    max_scatter_points – макс. число точек на PCA scatter (остальное семплируется)
+    max_silhouette_points – макс. число точек для силуэта
+    """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     unique_labels = np.unique(labels)
     palette = sns.color_palette("husl", len(unique_labels))
+    n_total = X.shape[0]
 
-    # 1. PCA scatter с эллипсами
+    # ---------- 1. PCA scatter с эллипсами (подвыборка) ----------
+    print("Построение PCA графика (может занять несколько секунд)...")
     pca = PCA(n_components=2, random_state=42)
-    X_pca = pca.fit_transform(X)
+    X_pca_all = pca.fit_transform(X)
+
+    # Случайная подвыборка для отрисовки точек
+    if n_total > max_scatter_points:
+        rng = np.random.RandomState(42)
+        idx_sample = rng.choice(n_total, size=max_scatter_points, replace=False)
+        X_pca_sample = X_pca_all[idx_sample]
+        labels_sample = labels[idx_sample]
+    else:
+        X_pca_sample = X_pca_all
+        labels_sample = labels
 
     plt.figure(figsize=(12, 8))
     ax = plt.gca()
+
+    # Рисуем только подвыборку
     for i, label in enumerate(unique_labels):
-        mask = labels == label
-        ax.scatter(X_pca[mask, 0], X_pca[mask, 1],
+        mask = labels_sample == label
+        ax.scatter(X_pca_sample[mask, 0], X_pca_sample[mask, 1],
                    color=palette[i], label=f'Кластер {label}',
                    alpha=0.6, edgecolor='k', s=20)
-    plot_cluster_ellipses(ax, X_pca, labels, palette, n_std=1.5, alpha=0.15)
+
+    # Эллипсы и центроиды считаем по полным данным (быстро)
+    plot_cluster_ellipses(ax, X_pca_all, labels, palette, n_std=1.5, alpha=0.15)
 
     for i, label in enumerate(unique_labels):
         mask = labels == label
-        center = np.mean(X_pca[mask], axis=0)
+        center = np.mean(X_pca_all[mask], axis=0)
         ax.scatter(*center, color=palette[i], edgecolor='black', s=200, marker='D',
                    linewidth=1.5, label=f'Центроид {label}')
+
     handles, labels_ = ax.get_legend_handles_labels()
     by_label = dict(zip(labels_, handles))
     ax.legend(by_label.values(), by_label.keys())
     ax.set_xlabel('Первая главная компонента')
     ax.set_ylabel('Вторая главная компонента')
-    ax.set_title('Проекция данных на первые две главные компоненты (PCA)\nс эллипсами кластеров')
+    ax.set_title('Проекция данных на первые две главные компоненты (PCA)\nс эллипсами кластеров (подвыборка)')
     plt.tight_layout()
     plt.savefig(output_dir / 'clusters_pca.png', dpi=150)
     plt.close()
+    print("PCA график сохранён.")
 
-    # 2. Silhouette plot
-    sample_silhouette_values = silhouette_samples(X, labels)
+    # ---------- 2. Silhouette plot (подвыборка) ----------
+    print("Построение графика силуэта (может занять несколько секунд)...")
+    # Вычисляем silhouette_samples для всех? Медленно. Лучше на подвыборке.
+    if n_total > max_silhouette_points:
+        rng = np.random.RandomState(42)
+        idx_sil = rng.choice(n_total, size=max_silhouette_points, replace=False)
+        X_sub = X[idx_sil]
+        labels_sub = labels[idx_sil]
+    else:
+        X_sub = X
+        labels_sub = labels
+
+    # Быстрое вычисление
+    sample_sil_values = silhouette_samples(X_sub, labels_sub)
+
     plt.figure(figsize=(10, 7))
     y_lower = 10
     for i, label in enumerate(unique_labels):
-        ith_cluster_silhouette_values = sample_silhouette_values[labels == label]
-        ith_cluster_silhouette_values.sort()
-        size_cluster_i = ith_cluster_silhouette_values.shape[0]
+        cluster_vals = sample_sil_values[labels_sub == label]
+        cluster_vals.sort()
+        size_cluster_i = cluster_vals.shape[0]
         y_upper = y_lower + size_cluster_i
-        color = palette[i]
         plt.fill_betweenx(np.arange(y_lower, y_upper),
-                          0, ith_cluster_silhouette_values,
-                          facecolor=color, alpha=0.7)
+                          0, cluster_vals,
+                          facecolor=palette[i], alpha=0.7)
         plt.text(-0.05, y_lower + 0.5 * size_cluster_i, str(label))
         y_lower = y_upper + 10
-    avg_sil = silhouette_score(X, labels)
+
+    avg_sil = silhouette_score(X_sub, labels_sub, sample_size=min(10000, X_sub.shape[0]), n_jobs=-1, random_state=42)
     plt.axvline(x=avg_sil, color="red", linestyle="--")
     plt.xlabel('Коэффициент силуэта')
     plt.ylabel('Кластер')
-    plt.title('График силуэта для кластеров')
+    plt.title('График силуэта для кластеров (подвыборка)')
     plt.yticks([])
     plt.tight_layout()
     plt.savefig(output_dir / 'clusters_silhouette.png', dpi=150)
     plt.close()
+    print("График силуэта сохранён.")
 
-    # 3. Средние значения признаков (топ-10)
+    # ---------- 3. Средние значения признаков (топ-10) ----------
+    print("Построение графика средних значений признаков...")
     if feature_names is not None and len(feature_names) > 1:
         cluster_means = []
         for label in unique_labels:
@@ -147,10 +189,10 @@ def visualize_clusters(X, labels, feature_names, output_dir, model=None):
         plt.tight_layout()
         plt.savefig(output_dir / 'clusters_feature_means.png', dpi=150)
         plt.close()
+        print("График средних значений сохранён.")
 
 
 def profile_clusters(snapshot_with_labels):
-    """Средние характеристики кластеров."""
     return snapshot_with_labels.groupby('cluster').agg({
         'debt_amount': 'mean',
         'debt_age': 'mean',
@@ -163,7 +205,6 @@ def profile_clusters(snapshot_with_labels):
 
 
 def cluster_summary(snapshot_with_labels):
-    """Количество и процент клиентов в каждом кластере."""
     counts = snapshot_with_labels['cluster'].value_counts().sort_index()
     total = len(snapshot_with_labels)
     summary = pd.DataFrame({
