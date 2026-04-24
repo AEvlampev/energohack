@@ -83,14 +83,18 @@ def build_assignments(snapshot, effectiveness, measure_criteria, model=None, fea
 def greedy_optimize(snapshot, effectiveness, monthly_limits, measure_criteria, model=None, feature_cols=None):
     """
     Жадное назначение мер с учётом лимитов и этапности.
-    Возвращает словарь рекомендаций и DataFrame с predicted_rate и expected_recovery.
+    Возвращает:
+        recommendations (dict): {account_id: [measure1, measure2]}
+        rec_df (DataFrame): предсказанные доли возврата и ожидаемый возврат
+        limits_usage (dict): {measure: {'used': int, 'limit': int}} для мер с конечным лимитом
     """
     assignments = build_assignments(snapshot, effectiveness, measure_criteria, model, feature_cols)
     if assignments.empty:
-        return {}, pd.DataFrame()
+        return {}, pd.DataFrame(), {}
 
     assignments = assignments.sort_values('profit', ascending=False)
 
+    # Только меры с конечным лимитом
     limits = {m: limit for m, limit in monthly_limits.items() if limit < float('inf')}
     current_usage = {m: 0 for m in limits}
     client_measure_count = {}
@@ -116,7 +120,6 @@ def greedy_optimize(snapshot, effectiveness, monthly_limits, measure_criteria, m
         if acc_id not in result_data:
             result_data[acc_id] = {'predicted_rate': rate, 'expected_recovery': recovery}
         else:
-            # Оставляем лучшее (максимальный rate и recovery)
             if rate > result_data[acc_id]['predicted_rate']:
                 result_data[acc_id]['predicted_rate'] = rate
                 result_data[acc_id]['expected_recovery'] = recovery
@@ -125,6 +128,7 @@ def greedy_optimize(snapshot, effectiveness, monthly_limits, measure_criteria, m
         if measure in limits:
             current_usage[measure] += 1
 
+    # DataFrame с прогнозами
     rec_df = pd.DataFrame([
         {'account_id': k,
          'predicted_rate': v['predicted_rate'],
@@ -133,7 +137,10 @@ def greedy_optimize(snapshot, effectiveness, monthly_limits, measure_criteria, m
     ])
     rec_df['measures'] = rec_df['account_id'].map(lambda x: ','.join(recommendations.get(x, [])))
 
-    return recommendations, rec_df
+    # Словарь использования лимитов
+    limits_usage = {m: {'used': current_usage[m], 'limit': limits[m]} for m in limits}
+
+    return recommendations, rec_df, limits_usage
 
 
 def optimize_measures(snapshot, effectiveness, monthly_limits, measure_criteria, model=None, feature_cols=None):

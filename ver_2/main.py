@@ -41,24 +41,43 @@ def main(target_date_str):
         print("Создание графиков кластеризации...")
         visualize_clusters(X, labels, feat_names, output_dir, model=model)
 
-    # Статистика по кластерам
+    # Распределение клиентов по кластерам
     clust_summary = cluster_summary(snapshot)
     print("\nРаспределение клиентов по кластерам:")
-    print(clust_summary.to_string(index=False))
+    summary_str = clust_summary.to_string(index=False)
+    print(summary_str)
+    try:
+        dist_file = output_dir / 'clients_clusters_distribution.txt'
+        with open(dist_file, 'w', encoding='utf-8') as f:
+            f.write(summary_str)
+        print(f"Файл {dist_file} успешно сохранён")
+    except Exception as e:
+        print(f"Ошибка сохранения {dist_file}: {e}")
 
-    # После cluster_summary
+    # Портреты кластеров
     print("\nПортреты кластеров (ключевые отличия):")
-    # Для портретов используем исходные признаки, которые использовались в кластеризации,
-    # но также можно добавить признаки из модели, например debt_amount.
-    # Возьмём признаковый набор из кластеризации
-    portrait_features = feat_names  # feat_names получены из prepare_clustering_features
-    portraits = cluster_portraits(snapshot, portrait_features, top_n=5)
-    for cl, desc in portraits.items():
-        print(desc)
+    portraits = cluster_portraits(snapshot, feat_names, top_n=5)
+    try:
+        portr_file = output_dir / 'clusters_portraits.txt'
+        with open(portr_file, 'w', encoding='utf-8') as f:
+            for cl, desc in portraits.items():
+                f.write(desc + '\n')
+                print(desc)
+        print(f"Файл {portr_file} успешно сохранён")
+    except Exception as e:
+        print(f"Ошибка сохранения {portr_file}: {e}")
 
+    # Профили кластеров
     print("\nПрофили кластеров (средние):")
     profiles = profile_clusters(snapshot)
     print(profiles)
+    try:
+        prof_file = output_dir / 'profiles_clusters.txt'
+        with open(prof_file, 'w', encoding='utf-8') as f:
+            f.write(str(profiles))
+        print(f"Файл {prof_file} успешно сохранён")
+    except Exception as e:
+        print(f"Ошибка сохранения {prof_file}: {e}")
 
     with open(output_dir / 'metrics_clustering.json', 'w') as f:
         json.dump(clust_metrics, f, indent=2)
@@ -97,10 +116,21 @@ def main(target_date_str):
     # ---------- Оптимизация ----------
     print("\nОптимизация назначений...")
     effectiveness = {}
-    recommendations, rec_df = greedy_optimize(
+    recommendations, rec_df, limits_usage = greedy_optimize(
         snapshot, effectiveness, cfg.MONTHLY_LIMITS, cfg.MEASURE_CRITERIA,
         model=reg_model, feature_cols=available_feats
     )
+
+    # ---------- Отчёт об использовании лимитов ----------
+    print("\n=== Использование лимитов ===")
+    if limits_usage:
+        for measure, data in limits_usage.items():
+            print(f"  {measure}: {data['used']} / {data['limit']}")
+    else:
+        print("  Нет мер с конечными лимитами.")
+
+    with open(output_dir / 'limits_usage.json', 'w') as f:
+        json.dump(limits_usage, f, indent=2, ensure_ascii=False)
 
     # ---------- Объяснения ----------
     print("Генерация обоснований...")

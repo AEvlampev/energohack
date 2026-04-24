@@ -27,14 +27,17 @@ MEASURE_CRITERIA = {
     'sms': {'min_age': 1, 'max_age': 2, 'min_amount': 500, 'max_amount': 2000, 'require_contact': True},
     'autodial': {'min_age': 2, 'max_age': 6, 'min_amount': 500, 'max_amount': 1500, 'require_contact': True},
     'operator_call': {'min_age': 2, 'max_age': 6, 'min_amount': 1500, 'require_contact': True},
-    'claim': {'min_age': 2, 'max_age': 6, 'min_amount': 500, 'require_contact': False,  # доп.условия: нет телефона/недозвон/отказ
+    'claim': {'min_age': 2, 'max_age': 6, 'min_amount': 500, 'require_contact': False,
               'contact_condition': 'no_phone_or_refusal'},
+    'visit': {'min_age': 6, 'min_amount': 2000, 'require_contact': False},          # добавлено
     'restriction_notice': {'min_age': 1, 'min_amount': 1500, 'require_info_fail': True,
-                           'require_debt_gt_double_normative': True},  # упрощено
+                           'require_debt_gt_double_normative': True},
+    'restriction': {'min_age': 2, 'min_amount': 1500, 'require_info_fail': True},   # добавлено
     'court_order': {'min_age': 4, 'min_amount': 10000, 'require_restriction_fail': True},
     'court_order_6_4k': {'min_age': 6, 'min_amount': 4000, 'require_restriction_fail': True},
     'court_order_11_2k': {'min_age': 11, 'min_amount': 2000, 'require_restriction_fail': True},
-    'court_order_11_less2k': {'min_age': 11, 'max_amount': 2000, 'require_commission': True},  # особая комиссия
+    'court_order_11_less2k': {'min_age': 11, 'max_amount': 2000, 'require_commission': True},
+    'court_decision': {'min_age': 8, 'min_amount': 4000, 'require_restriction_fail': True},  # добавлено
 }
 
 # Месячные лимиты (Приложение 2)
