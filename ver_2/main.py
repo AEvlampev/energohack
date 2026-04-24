@@ -6,7 +6,7 @@ import config as cfg
 from preprocessing import load_all_data, build_monthly_snapshot
 from feature_engineering import prepare_clustering_features, add_cluster_labels
 from clustering import (
-    perform_clustering, visualize_clusters, profile_clusters, cluster_summary
+    perform_clustering, visualize_clusters, profile_clusters, cluster_summary, cluster_portraits
 )
 from model import train_regression_model, train_classification_model
 from optimizer import greedy_optimize
@@ -45,6 +45,16 @@ def main(target_date_str):
     clust_summary = cluster_summary(snapshot)
     print("\nРаспределение клиентов по кластерам:")
     print(clust_summary.to_string(index=False))
+
+    # После cluster_summary
+    print("\nПортреты кластеров (ключевые отличия):")
+    # Для портретов используем исходные признаки, которые использовались в кластеризации,
+    # но также можно добавить признаки из модели, например debt_amount.
+    # Возьмём признаковый набор из кластеризации
+    portrait_features = feat_names  # feat_names получены из prepare_clustering_features
+    portraits = cluster_portraits(snapshot, portrait_features, top_n=5)
+    for cl, desc in portraits.items():
+        print(desc)
 
     print("\nПрофили кластеров (средние):")
     profiles = profile_clusters(snapshot)

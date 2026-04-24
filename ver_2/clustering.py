@@ -9,6 +9,8 @@ from sklearn.cluster import MiniBatchKMeans
 from sklearn.metrics import silhouette_score, davies_bouldin_score, silhouette_samples
 from sklearn.decomposition import PCA
 from pathlib import Path
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import StandardScaler
 
 def perform_clustering(X, max_k=10, use_pca=True):
     """Кластеризация MiniBatchKMeans с автоподбором k по силуэту."""
@@ -213,3 +215,93 @@ def cluster_summary(snapshot_with_labels):
         'percentage': (counts.values / total * 100).round(2)
     })
     return summary
+
+def feature_importance_analysis(X, labels, feature_names):
+    """
+    Обучает RandomForestClassifier предсказывать метку кластера,
+    возвращает DataFrame с важностью признаков, отсортированный по убыванию.
+    """
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    clf = RandomForestClassifier(n_estimators=100, max_depth=8, random_state=42, n_jobs=-1)
+    clf.fit(X_scaled, labels)
+    importances = clf.feature_importances_
+    importance_df = pd.DataFrame({
+        'feature': feature_names,
+        'importance': importances
+    }).sort_values('importance', ascending=False).reset_index(drop=True)
+    return importance_df
+
+
+def cluster_portraits(snapshot, feature_names, top_n=5):
+    """
+    Формирует словесные портреты кластеров на основе ключевых признаков.
+    """
+    if 'cluster' not in snapshot.columns:
+        return {}
+
+    # Выбираем признаки, которые есть в snapshot и не являются бинарными контактами (для них свой подход)
+    numeric_cols = [f for f in feature_names if f in snapshot.columns]
+    if not numeric_cols:
+        return {}
+
+    # Общие средние по всем данным
+    overall_mean = snapshot[numeric_cols].mean()
+    cluster_means = snapshot.groupby('cluster')[numeric_cols].mean()
+
+    # Важность признаков через RandomForest
+    X = snapshot[numeric_cols].fillna(0).values
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    clf = RandomForestClassifier(n_estimators=100, max_depth=8, random_state=42, n_jobs=-1)
+    clf.fit(X_scaled, snapshot['cluster'])
+    importances = clf.feature_importances_
+    importance_series = pd.Series(importances, index=numeric_cols).sort_values(ascending=False)
+    top_features = importance_series.head(top_n).index.tolist()
+
+    portraits = {}
+    for cluster in sorted(snapshot['cluster'].unique()):
+        desc_parts = []
+        for col in top_features:
+            mean_cl = cluster_means.loc[cluster, col]
+            mean_all = overall_mean[col]
+            # Для бинарных (0/1) признаков выводим процент
+            if snapshot[col].nunique() <= 2 and snapshot[col].min() >= 0 and snapshot[col].max() <= 1:
+                pct_cl = mean_cl * 100
+                pct_all = mean_all * 100
+                diff = pct_cl - pct_all
+                if abs(diff) < 5:
+                    desc = f"{col}: {pct_cl:.0f}% (как в среднем)"
+                else:
+                    direction = "больше" if diff > 0 else "меньше"
+                    desc = f"{col}: {pct_cl:.0f}% ({direction} на {abs(diff):.0f} п.п.)"
+                desc_parts.append(desc)
+                continue
+
+            # Для количественных признаков: сравниваем относительное отклонение
+            if abs(mean_all) > 1e-6:
+                relative_diff = (mean_cl - mean_all) / abs(mean_all)
+                if abs(relative_diff) < 0.2:
+                    desc = f"{col}: {mean_cl:.1f} (на уровне среднего)"
+                elif relative_diff > 2.0:
+                    desc = f"{col}: {mean_cl:.1f} (в {relative_diff+1:.1f} раза выше среднего)"
+                elif relative_diff < -0.5:
+                    desc = f"{col}: {mean_cl:.1f} (в {1/(1+relative_diff):.1f} раза ниже среднего)"
+                else:
+                    direction = "выше" if relative_diff > 0 else "ниже"
+                    desc = f"{col}: {mean_cl:.1f} ({direction} среднего на {abs(relative_diff)*100:.0f}%)"
+            else:
+                desc = f"{col}: {mean_cl:.1f}"
+            desc_parts.append(desc)
+
+        # Добавляем общие сводки
+        if 'debt_amount' in cluster_means.columns:
+            desc_parts.append(f"Средний долг: {cluster_means.loc[cluster, 'debt_amount']:.0f} руб.")
+        if 'debt_age' in cluster_means.columns:
+            desc_parts.append(f"возраст долга: {cluster_means.loc[cluster, 'debt_age']:.1f} мес.")
+        if 'num_contacts' in cluster_means.columns:
+            desc_parts.append(f"контактов: {cluster_means.loc[cluster, 'num_contacts']:.1f}")
+
+        portraits[cluster] = "Кластер {}: ".format(cluster) + "; ".join(desc_parts)
+
+    return portraits
