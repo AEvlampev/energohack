@@ -1,0 +1,38 @@
+{
+  "autodial": {
+    "used": 2970,
+    "limit": 8000
+  },
+  "sms": {
+    "used": 467,
+    "limit": 2150
+  },
+  "operator_call": {
+    "used": 1071,
+    "limit": 1550
+  },
+  "claim": {
+    "used": 400,
+    "limit": 400
+  },
+  "visit": {
+    "used": 500,
+    "limit": 500
+  },
+  "restriction_notice": {
+    "used": 6200,
+    "limit": 6200
+  },
+  "restriction": {
+    "used": 200,
+    "limit": 200
+  },
+  "court_order": {
+    "used": 400,
+    "limit": 400
+  },
+  "court_decision": {
+    "used": 250,
+    "limit": 250
+  }
+}
